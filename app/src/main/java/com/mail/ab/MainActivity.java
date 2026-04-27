@@ -1,33 +1,40 @@
-package com.mail.ab; // استبدل هذا باسم حزمتك
+package com.mail.ab;
 
 import android.content.Intent;
 import android.net.Uri;
 import android.os.Bundle;
+import android.util.Base64;
 import android.view.View;
-import android.widget.Button;
 import android.widget.ProgressBar;
+import android.widget.TextView;
 import android.widget.Toast;
 import androidx.appcompat.app.AppCompatActivity;
 import com.android.volley.Request;
 import com.android.volley.RequestQueue;
 import com.android.volley.toolbox.JsonObjectRequest;
 import com.android.volley.toolbox.Volley;
+import com.google.android.material.button.MaterialButton;
 import com.google.android.material.textfield.TextInputEditText;
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+import java.io.InputStream;
 import java.util.HashMap;
 import java.util.Map;
 
 public class MainActivity extends AppCompatActivity {
 
     private TextInputEditText etFrom, etTo, etSubject, etBody;
-    private Button btnSend;
+    private TextView tvFileName;
+    private MaterialButton btnSend, btnAttach;
     private ProgressBar loader;
     private String currentToken = "";
+    private Uri attachmentUri = null; 
     private RequestQueue queue;
 
-    // استبدل هذا بالرابط الذي نشرته في Google Apps Script
+    // رابط Google Apps Script الخاص بك
     private final String SCRIPT_URL = "https://script.google.com/macros/s/AKfycbz10tkJV8IWZYaZ-3Hv5w--PWNIlmzkClB-yga3T0eGn5KiTfalwKnLc6KDlVvzmnTFRw/exec";
 
     @Override
@@ -35,52 +42,78 @@ public class MainActivity extends AppCompatActivity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
 
-        // ربط العناصر
+        // ربط العناصر بالواجهة الاحترافية
         etFrom = findViewById(R.id.etFrom);
         etTo = findViewById(R.id.etTo);
         etSubject = findViewById(R.id.etSubject);
         etBody = findViewById(R.id.etBody);
+        tvFileName = findViewById(R.id.tvFileName);
         btnSend = findViewById(R.id.btnSend);
+        btnAttach = findViewById(R.id.btnAttach);
         loader = findViewById(R.id.loader);
 
         queue = Volley.newRequestQueue(this);
 
-        // 1. استقبال البيانات إذا كان الطلب قادماً من تطبيق آخر
+        // 1. استقبال البيانات والمرفقات من التطبيقات الأخرى (مثل ملفات log أو zip)
         handleIncomingIntent();
 
-        // 2. جلب إيميل وتوكن جديد فور فتح التطبيق
+        // 2. جلب إيميل وتوكن جديد
         generateTempEmail();
 
         // 3. زر الإرسال
         btnSend.setOnClickListener(v -> {
-            String to = etTo.getText().toString();
-            String subject = etSubject.getText().toString();
-            String body = etBody.getText().toString();
-
-            if (!to.isEmpty() && !currentToken.isEmpty()) {
-                sendEmail(to, subject, body);
-            } else {
-                Toast.makeText(this, "يرجى الانتظار حتى تجهيز البريد أو إكمال البيانات", Toast.LENGTH_SHORT).show();
+            if (etTo.getText().toString().isEmpty()) {
+                Toast.makeText(this, "يرجى تحديد المستلم", Toast.LENGTH_SHORT).show();
+                return;
             }
+            sendEmail();
+        });
+
+        // 4. زر إرفاق ملف يدوياً
+        btnAttach.setOnClickListener(v -> {
+            Intent intent = new Intent(Intent.ACTION_GET_CONTENT);
+            intent.setType("*/*");
+            startActivityForResult(intent, 101);
         });
     }
 
     private void handleIncomingIntent() {
         Intent intent = getIntent();
         String action = intent.getAction();
+        String type = intent.getType();
 
-        if (Intent.ACTION_SENDTO.equals(action) || Intent.ACTION_VIEW.equals(action)) {
+        if (Intent.ACTION_SEND.equals(action) && type != null) {
+            // استقبال النصوص
+            etSubject.setText(intent.getStringExtra(Intent.EXTRA_SUBJECT));
+            String text = intent.getStringExtra(Intent.EXTRA_TEXT);
+            if (text != null) etBody.setText(text);
+
+            // استقبال المرفقات (الملفات المضغوطة أو السجلات)
+            if (intent.hasExtra(Intent.EXTRA_STREAM)) {
+                attachmentUri = (Uri) intent.getParcelableExtra(Intent.EXTRA_STREAM);
+                updateFileLabel();
+            }
+        } else if (Intent.ACTION_SENDTO.equals(action)) {
             Uri uri = intent.getData();
             if (uri != null && "mailto".equals(uri.getScheme())) {
                 etTo.setText(uri.getSchemeSpecificPart());
             }
-        } else if (Intent.ACTION_SEND.equals(action)) {
-            if (intent.hasExtra(Intent.EXTRA_EMAIL)) {
-                String[] recipients = intent.getStringArrayExtra(Intent.EXTRA_EMAIL);
-                if (recipients != null) etTo.setText(recipients[0]);
-            }
-            etSubject.setText(intent.getStringExtra(Intent.EXTRA_SUBJECT));
-            etBody.setText(intent.getStringExtra(Intent.EXTRA_TEXT));
+        }
+    }
+
+    @Override
+    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+        super.onActivityResult(requestCode, resultCode, data);
+        if (requestCode == 101 && resultCode == RESULT_OK && data != null) {
+            attachmentUri = data.getData();
+            updateFileLabel();
+        }
+    }
+
+    private void updateFileLabel() {
+        if (attachmentUri != null) {
+            tvFileName.setText("المرفق جاهز: " + attachmentUri.getLastPathSegment());
+            tvFileName.setTextColor(getResources().getColor(android.R.color.holo_green_dark));
         }
     }
 
@@ -95,41 +128,51 @@ public class MainActivity extends AppCompatActivity {
                         currentToken = response.getString("token");
                         loader.setVisibility(View.GONE);
                         btnSend.setEnabled(true);
-                        Toast.makeText(this, "تم تجهيز بريد مؤقت جديد", Toast.LENGTH_SHORT).show();
-                    } catch (JSONException e) {
-                        e.printStackTrace();
-                    }
+                    } catch (JSONException e) { e.printStackTrace(); }
                 },
                 error -> {
                     loader.setVisibility(View.GONE);
-                    Toast.makeText(this, "فشل في الاتصال بالسكربت", Toast.LENGTH_LONG).show();
+                    Toast.makeText(this, "خطأ في الاتصال بالسكربت", Toast.LENGTH_LONG).show();
                 });
         queue.add(request);
     }
 
-    private void sendEmail(String to, String subject, String body) {
+    private void sendEmail() {
         loader.setVisibility(View.VISIBLE);
         btnSend.setEnabled(false);
 
-        String url = "https://api.mail.tm/messages";
-
         JSONObject jsonBody = new JSONObject();
         try {
-            jsonBody.put("to", new JSONArray().put(to));
-            jsonBody.put("subject", subject);
-            jsonBody.put("text", body);
-        } catch (JSONException e) { e.printStackTrace(); }
+            jsonBody.put("to", new JSONArray().put(etTo.getText().toString()));
+            jsonBody.put("subject", etSubject.getText().toString());
+            
+            String messageText = etBody.getText().toString();
+            
+            // تحويل المرفق (log/zip) إلى Base64 لإرساله
+            if (attachmentUri != null) {
+                byte[] fileBytes = getBytesFromUri(attachmentUri);
+                if (fileBytes != null) {
+                    String base64File = Base64.encodeToString(fileBytes, Base64.NO_WRAP);
+                    jsonBody.put("attachmentData", base64File);
+                    jsonBody.put("attachmentName", attachmentUri.getLastPathSegment());
+                    messageText += "\n\n(تم إرسال مرفق مع هذه الرسالة)";
+                }
+            }
+            
+            jsonBody.put("text", messageText);
 
-        JsonObjectRequest sendReq = new JsonObjectRequest(Request.Method.POST, url, jsonBody,
+        } catch (JSONException | IOException e) { e.printStackTrace(); }
+
+        JsonObjectRequest sendReq = new JsonObjectRequest(Request.Method.POST, "https://api.mail.tm/messages", jsonBody,
                 response -> {
                     loader.setVisibility(View.GONE);
                     Toast.makeText(this, "تم الإرسال بنجاح!", Toast.LENGTH_LONG).show();
-                    finish(); // العودة للتطبيق الأصلي
+                    finish();
                 },
                 error -> {
                     loader.setVisibility(View.GONE);
                     btnSend.setEnabled(true);
-                    Toast.makeText(this, "خطأ في الإرسال: " + error.toString(), Toast.LENGTH_LONG).show();
+                    Toast.makeText(this, "فشل الإرسال: تحقق من الاتصال", Toast.LENGTH_SHORT).show();
                 }) {
             @Override
             public Map<String, String> getHeaders() {
@@ -140,5 +183,17 @@ public class MainActivity extends AppCompatActivity {
             }
         };
         queue.add(sendReq);
+    }
+
+    private byte[] getBytesFromUri(Uri uri) throws IOException {
+        InputStream inputStream = getContentResolver().openInputStream(uri);
+        ByteArrayOutputStream byteBuffer = new ByteArrayOutputStream();
+        int bufferSize = 1024;
+        byte[] buffer = new byte[bufferSize];
+        int len;
+        while ((len = inputStream.read(buffer)) != -1) {
+            byteBuffer.write(buffer, 0, len);
+        }
+        return byteBuffer.toByteArray();
     }
 }
