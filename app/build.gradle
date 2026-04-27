@@ -31,6 +31,15 @@ android {
 }
 
 dependencies {
-    implementation 'com.android.volley:volley:1.2.1'
+    // المكتبات الأساسية للنظام
+    implementation 'androidx.appcompat:appcompat:1.6.1'
     implementation 'com.google.android.material:material:1.9.0'
+    implementation 'androidx.constraintlayout:constraintlayout:2.1.4'
+
+    // مكتبة Volley للتعامل مع الـ API (السكربت و Mail.tm)
+    implementation 'com.android.volley:volley:1.2.1'
+
+    // مكتبة لدعم الـ Lifecycle (تساعد في استقرار التطبيق عند تدوير الشاشة)
+    implementation 'androidx.lifecycle:lifecycle-viewmodel:2.6.1'
+    implementation 'androidx.lifecycle:lifecycle-livedata:2.6.1'
 }
