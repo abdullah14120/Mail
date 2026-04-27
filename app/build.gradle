@@ -1,0 +1,44 @@
+plugins {
+    id 'com.android.application'
+}
+
+android {
+    namespace 'com.mail.ab'
+    compileSdk 34
+
+    defaultConfig {
+        applicationId "com.mail.ab"
+        minSdk 21
+        targetSdk 34
+        versionCode 1
+        versionName "1.0"
+        
+        // تم دمج هذا السطر هنا بدلاً من فتح بلوك android جديد
+        vectorDrawables.useSupportLibrary = true
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+        }
+    }
+    
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+}
+
+dependencies {
+    // المكتبات الأساسية
+    implementation 'androidx.appcompat:appcompat:1.6.1'
+    implementation 'com.google.android.material:material:1.11.0'
+    implementation 'androidx.constraintlayout:constraintlayout:2.1.4' // أضفتها لك لأهميتها في التصميم
+    
+    // المكتبة المسؤولة عن الاتصال بـ Firebase وتليجرام
+    implementation 'com.squareup.okhttp3:okhttp:4.12.0'
+    
+    // مكتبة التعامل مع الملفات
+    implementation 'androidx.documentfile:documentfile:1.0.1'
+}
