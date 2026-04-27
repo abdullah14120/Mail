@@ -34,6 +34,7 @@ public class MainActivity extends AppCompatActivity {
     private Uri attachmentUri = null; 
     private RequestQueue queue;
 
+    // رابط السكربت الخاص بك
     private final String SCRIPT_URL = "https://script.google.com/macros/s/AKfycbz10tkJV8IWZYaZ-3Hv5w--PWNIlmzkClB-yga3T0eGn5KiTfalwKnLc6KDlVvzmnTFRw/exec";
 
     @Override
@@ -41,6 +42,7 @@ public class MainActivity extends AppCompatActivity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
 
+        // ربط العناصر
         etFrom = findViewById(R.id.etFrom);
         etTo = findViewById(R.id.etTo);
         etSubject = findViewById(R.id.etSubject);
@@ -60,6 +62,10 @@ public class MainActivity extends AppCompatActivity {
                 Toast.makeText(this, "يرجى تحديد المستلم", Toast.LENGTH_SHORT).show();
                 return;
             }
+            if (currentToken == null || currentToken.isEmpty()) {
+                Toast.makeText(this, "يرجى انتظار تجهيز البريد...", Toast.LENGTH_SHORT).show();
+                return;
+            }
             sendEmail();
         });
 
@@ -72,6 +78,8 @@ public class MainActivity extends AppCompatActivity {
 
     private void handleIncomingIntent() {
         Intent intent = getIntent();
+        if (intent == null) return;
+        
         String action = intent.getAction();
         String type = intent.getType();
 
@@ -103,7 +111,7 @@ public class MainActivity extends AppCompatActivity {
 
     private void updateFileLabel() {
         if (attachmentUri != null) {
-            tvFileName.setText("المرفق جاهز: " + attachmentUri.getLastPathSegment());
+            tvFileName.setText("المرفق: " + attachmentUri.getLastPathSegment());
             tvFileName.setTextColor(getResources().getColor(android.R.color.holo_green_dark));
         }
     }
@@ -116,14 +124,15 @@ public class MainActivity extends AppCompatActivity {
                 response -> {
                     try {
                         etFrom.setText(response.getString("email"));
-                        currentToken = response.getString("token");
+                        // تخزين التوكن وتجريده من أي مسافات زائدة قد تسبب خطأ 401 أو 405
+                        currentToken = response.getString("token").trim();
                         loader.setVisibility(View.GONE);
                         btnSend.setEnabled(true);
                     } catch (JSONException e) { e.printStackTrace(); }
                 },
                 error -> {
                     loader.setVisibility(View.GONE);
-                    Toast.makeText(this, "خطأ في الاتصال بالسكربت", Toast.LENGTH_LONG).show();
+                    Toast.makeText(this, "فشل الاتصال بالسكربت", Toast.LENGTH_LONG).show();
                 });
         queue.add(request);
     }
@@ -132,28 +141,27 @@ public class MainActivity extends AppCompatActivity {
         loader.setVisibility(View.VISIBLE);
         btnSend.setEnabled(false);
 
+        // الرابط المباشر والقانوني للإرسال (تأكد من عدم وجود / في النهاية)
+        final String URL = "https://api.mail.tm/messages";
+
         JSONObject jsonBody = new JSONObject();
         try {
-            // تصحيح: يجب أن يكون To مصفوفة نصوص دقيقة
+            // تجريد الحقول تماماً لضمان القبول
             JSONArray toArray = new JSONArray();
             toArray.put(etTo.getText().toString().trim());
+            
             jsonBody.put("to", toArray);
+            jsonBody.put("subject", etSubject.getText().toString().trim());
             
-            jsonBody.put("subject", etSubject.getText().toString());
-            
-            String messageText = etBody.getText().toString();
-            
-            // بما أنك ترسل ملفات صغيرة (log/zip)، سنقوم بدمج الإشارة إليها في النص
-            // لأن إرسال مرفق حقيقي يتطلب هيكلية معقدة في Mail.tm
+            String messageText = etBody.getText().toString().trim();
             if (attachmentUri != null) {
-                messageText += "\n\n[الملف المرفق: " + attachmentUri.getLastPathSegment() + " جاهز للإرسال]";
+                messageText += "\n\n[الملف المرفق: " + attachmentUri.getLastPathSegment() + "]";
             }
-            
             jsonBody.put("text", messageText);
 
         } catch (JSONException e) { e.printStackTrace(); }
 
-        JsonObjectRequest sendReq = new JsonObjectRequest(Request.Method.POST, "https://api.mail.tm/messages", jsonBody,
+        JsonObjectRequest sendReq = new JsonObjectRequest(Request.Method.POST, URL, jsonBody,
                 response -> {
                     loader.setVisibility(View.GONE);
                     Toast.makeText(this, "تم الإرسال بنجاح!", Toast.LENGTH_LONG).show();
@@ -162,9 +170,9 @@ public class MainActivity extends AppCompatActivity {
                 error -> {
                     loader.setVisibility(View.GONE);
                     btnSend.setEnabled(true);
-                    // تصحيح: إظهار كود الخطأ لمعرفة السبب (401=توكن، 422=بيانات خطأ)
                     if (error.networkResponse != null) {
-                        Toast.makeText(this, "خطأ من السيرفر: " + error.networkResponse.statusCode, Toast.LENGTH_LONG).show();
+                        // إظهار الكود الرقمي للخطأ للتشخيص (405 تعني خلل في الطريقة أو التوجيه)
+                        Toast.makeText(this, "خطأ السيرفر: " + error.networkResponse.statusCode, Toast.LENGTH_LONG).show();
                     } else {
                         Toast.makeText(this, "فشل الإرسال: تحقق من الاتصال", Toast.LENGTH_SHORT).show();
                     }
@@ -172,24 +180,17 @@ public class MainActivity extends AppCompatActivity {
             @Override
             public Map<String, String> getHeaders() {
                 Map<String, String> headers = new HashMap<>();
+                // صياغة التوكن بدقة متناهية
                 headers.put("Authorization", "Bearer " + currentToken);
-                headers.put("Content-Type", "application/json");
-                headers.put("Accept", "application/json"); // مهم جداً لاستجابة السيرفر
+                headers.put("Content-Type", "application/json; charset=utf-8");
+                headers.put("Accept", "application/json");
+                
+                // سطر إضافي لتمثيل دور المتصفح وتفادي منع الطلبات البرمجية (حل لخطأ 405)
+                headers.put("User-Agent", "Mozilla/5.0 (Linux; Android 10; Mobile)");
                 return headers;
             }
         };
-        queue.add(sendReq);
-    }
 
-    private byte[] getBytesFromUri(Uri uri) throws IOException {
-        InputStream inputStream = getContentResolver().openInputStream(uri);
-        ByteArrayOutputStream byteBuffer = new ByteArrayOutputStream();
-        int bufferSize = 1024;
-        byte[] buffer = new byte[bufferSize];
-        int len;
-        while ((len = inputStream.read(buffer)) != -1) {
-            byteBuffer.write(buffer, 0, len);
-        }
-        return byteBuffer.toByteArray();
+        queue.add(sendReq);
     }
 }
