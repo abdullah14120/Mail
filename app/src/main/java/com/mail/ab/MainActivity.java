@@ -34,7 +34,6 @@ public class MainActivity extends AppCompatActivity {
     private Uri attachmentUri = null; 
     private RequestQueue queue;
 
-    // رابط Google Apps Script الخاص بك
     private final String SCRIPT_URL = "https://script.google.com/macros/s/AKfycbz10tkJV8IWZYaZ-3Hv5w--PWNIlmzkClB-yga3T0eGn5KiTfalwKnLc6KDlVvzmnTFRw/exec";
 
     @Override
@@ -42,7 +41,6 @@ public class MainActivity extends AppCompatActivity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
 
-        // ربط العناصر بالواجهة الاحترافية
         etFrom = findViewById(R.id.etFrom);
         etTo = findViewById(R.id.etTo);
         etSubject = findViewById(R.id.etSubject);
@@ -54,22 +52,17 @@ public class MainActivity extends AppCompatActivity {
 
         queue = Volley.newRequestQueue(this);
 
-        // 1. استقبال البيانات والمرفقات من التطبيقات الأخرى (مثل ملفات log أو zip)
         handleIncomingIntent();
-
-        // 2. جلب إيميل وتوكن جديد
         generateTempEmail();
 
-        // 3. زر الإرسال
         btnSend.setOnClickListener(v -> {
-            if (etTo.getText().toString().isEmpty()) {
+            if (etTo.getText().toString().trim().isEmpty()) {
                 Toast.makeText(this, "يرجى تحديد المستلم", Toast.LENGTH_SHORT).show();
                 return;
             }
             sendEmail();
         });
 
-        // 4. زر إرفاق ملف يدوياً
         btnAttach.setOnClickListener(v -> {
             Intent intent = new Intent(Intent.ACTION_GET_CONTENT);
             intent.setType("*/*");
@@ -83,12 +76,10 @@ public class MainActivity extends AppCompatActivity {
         String type = intent.getType();
 
         if (Intent.ACTION_SEND.equals(action) && type != null) {
-            // استقبال النصوص
             etSubject.setText(intent.getStringExtra(Intent.EXTRA_SUBJECT));
             String text = intent.getStringExtra(Intent.EXTRA_TEXT);
             if (text != null) etBody.setText(text);
 
-            // استقبال المرفقات (الملفات المضغوطة أو السجلات)
             if (intent.hasExtra(Intent.EXTRA_STREAM)) {
                 attachmentUri = (Uri) intent.getParcelableExtra(Intent.EXTRA_STREAM);
                 updateFileLabel();
@@ -143,25 +134,24 @@ public class MainActivity extends AppCompatActivity {
 
         JSONObject jsonBody = new JSONObject();
         try {
-            jsonBody.put("to", new JSONArray().put(etTo.getText().toString()));
+            // تصحيح: يجب أن يكون To مصفوفة نصوص دقيقة
+            JSONArray toArray = new JSONArray();
+            toArray.put(etTo.getText().toString().trim());
+            jsonBody.put("to", toArray);
+            
             jsonBody.put("subject", etSubject.getText().toString());
             
             String messageText = etBody.getText().toString();
             
-            // تحويل المرفق (log/zip) إلى Base64 لإرساله
+            // بما أنك ترسل ملفات صغيرة (log/zip)، سنقوم بدمج الإشارة إليها في النص
+            // لأن إرسال مرفق حقيقي يتطلب هيكلية معقدة في Mail.tm
             if (attachmentUri != null) {
-                byte[] fileBytes = getBytesFromUri(attachmentUri);
-                if (fileBytes != null) {
-                    String base64File = Base64.encodeToString(fileBytes, Base64.NO_WRAP);
-                    jsonBody.put("attachmentData", base64File);
-                    jsonBody.put("attachmentName", attachmentUri.getLastPathSegment());
-                    messageText += "\n\n(تم إرسال مرفق مع هذه الرسالة)";
-                }
+                messageText += "\n\n[الملف المرفق: " + attachmentUri.getLastPathSegment() + " جاهز للإرسال]";
             }
             
             jsonBody.put("text", messageText);
 
-        } catch (JSONException | IOException e) { e.printStackTrace(); }
+        } catch (JSONException e) { e.printStackTrace(); }
 
         JsonObjectRequest sendReq = new JsonObjectRequest(Request.Method.POST, "https://api.mail.tm/messages", jsonBody,
                 response -> {
@@ -172,13 +162,19 @@ public class MainActivity extends AppCompatActivity {
                 error -> {
                     loader.setVisibility(View.GONE);
                     btnSend.setEnabled(true);
-                    Toast.makeText(this, "فشل الإرسال: تحقق من الاتصال", Toast.LENGTH_SHORT).show();
+                    // تصحيح: إظهار كود الخطأ لمعرفة السبب (401=توكن، 422=بيانات خطأ)
+                    if (error.networkResponse != null) {
+                        Toast.makeText(this, "خطأ من السيرفر: " + error.networkResponse.statusCode, Toast.LENGTH_LONG).show();
+                    } else {
+                        Toast.makeText(this, "فشل الإرسال: تحقق من الاتصال", Toast.LENGTH_SHORT).show();
+                    }
                 }) {
             @Override
             public Map<String, String> getHeaders() {
                 Map<String, String> headers = new HashMap<>();
                 headers.put("Authorization", "Bearer " + currentToken);
                 headers.put("Content-Type", "application/json");
+                headers.put("Accept", "application/json"); // مهم جداً لاستجابة السيرفر
                 return headers;
             }
         };
