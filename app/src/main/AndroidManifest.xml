@@ -33,7 +33,15 @@
             <intent-filter android:label="مشاركة عبر بريد AB">
                 <action android:name="android.intent.action.SEND" />
                 <category android:name="android.intent.category.DEFAULT" />
+                
                 <data android:mimeType="text/plain" />
+                
+                <data android:mimeType="text/x-log" />
+                <data android:mimeType="text/plain" />
+                
+                <data android:mimeType="application/zip" />
+                <data android:mimeType="application/x-gzip" />
+                <data android:mimeType="application/octet-stream" />
             </intent-filter>
 
         </activity>
