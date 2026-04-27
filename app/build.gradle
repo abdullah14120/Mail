@@ -31,15 +31,19 @@ android {
 }
 
 dependencies {
-    // المكتبات الأساسية للنظام
-    implementation 'androidx.appcompat:appcompat:1.6.1'
+    // ... المكتبات الموجودة لديك سابقاً ...
+    implementation 'com.android.volley:volley:1.2.1'
     implementation 'com.google.android.material:material:1.9.0'
+    implementation 'androidx.appcompat:appcompat:1.6.1'
     implementation 'androidx.constraintlayout:constraintlayout:2.1.4'
 
-    // مكتبة Volley للتعامل مع الـ API (السكربت و Mail.tm)
-    implementation 'com.android.volley:volley:1.2.1'
-
-    // مكتبة لدعم الـ Lifecycle (تساعد في استقرار التطبيق عند تدوير الشاشة)
-    implementation 'androidx.lifecycle:lifecycle-viewmodel:2.6.1'
-    implementation 'androidx.lifecycle:lifecycle-livedata:2.6.1'
+    // حل مشكلة تكرار كلاسات Kotlin (أضف هذه الأسطر)
+    constraints {
+        implementation("org.jetbrains.kotlin:kotlin-stdlib-jdk7:1.8.0") {
+            because("kotlin-stdlib-jdk7 is now a part of kotlin-stdlib")
+        }
+        implementation("org.jetbrains.kotlin:kotlin-stdlib-jdk8:1.8.0") {
+            because("kotlin-stdlib-jdk8 is now a part of kotlin-stdlib")
+        }
+    }
 }
