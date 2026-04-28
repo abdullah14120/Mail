@@ -1,5 +1,7 @@
 plugins {
     id 'com.android.application'
+    // إضافة Plugin خدمات جوجل لربط ملف google-services.json
+    id 'com.google.gms.google-services'
 }
 
 android {
@@ -13,7 +15,6 @@ android {
         versionCode 1
         versionName "1.0"
         
-        // تم دمج هذا السطر هنا بدلاً من فتح بلوك android جديد
         vectorDrawables.useSupportLibrary = true
     }
 
@@ -31,13 +32,19 @@ android {
 }
 
 dependencies {
-    // ... المكتبات الموجودة لديك سابقاً ...
-    implementation 'com.android.volley:volley:1.2.1'
-    implementation 'com.google.android.material:material:1.9.0'
+    // المكتبات الأساسية لواجهة المستخدم
     implementation 'androidx.appcompat:appcompat:1.6.1'
+    implementation 'com.google.android.material:material:1.9.0'
     implementation 'androidx.constraintlayout:constraintlayout:2.1.4'
 
-    // حل مشكلة تكرار كلاسات Kotlin (أضف هذه الأسطر)
+    // مكتبة Firebase الأساسية وقاعدة البيانات (الحل المجاني)
+    implementation platform('com.google.firebase:firebase-bom:32.2.0')
+    implementation 'com.google.firebase:firebase-database'
+
+    // مكتبة Volley (أبقينا عليها لدعم العمليات الأخرى إن وجدت)
+    implementation 'com.android.volley:volley:1.2.1'
+
+    // حل مشكلة تكرار كلاسات Kotlin (التي تظهر مع مكتبات Material الحديثة)
     constraints {
         implementation("org.jetbrains.kotlin:kotlin-stdlib-jdk7:1.8.0") {
             because("kotlin-stdlib-jdk7 is now a part of kotlin-stdlib")
