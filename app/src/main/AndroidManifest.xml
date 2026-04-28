@@ -4,7 +4,6 @@
 
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
-    
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32" />
 
     <application
@@ -22,27 +21,29 @@
             
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
-                <category android:name="android.intent.category.LAUNCHER" />
+                <category android:name="android.intent.category.LAUNCHer" />
             </intent-filter>
 
             <intent-filter android:label="إرسال عبر بريد AB">
                 <action android:name="android.intent.action.SENDTO" />
                 <data android:scheme="mailto" />
                 <category android:name="android.intent.category.DEFAULT" />
-                <category android:name="android.intent.category.BROWSABLE" />
             </intent-filter>
 
-            <intent-filter android:label="مشاركة عبر بريد AB">
+            <intent-filter android:label="بريد AB">
                 <action android:name="android.intent.action.SEND" />
                 <category android:name="android.intent.category.DEFAULT" />
                 
                 <data android:mimeType="text/plain" />
-                <data android:mimeType="text/x-log" />
                 
-                <data android:mimeType="application/zip" />
-                <data android:mimeType="application/x-gzip" />
-                <data android:mimeType="application/octet-stream" />
-                <data android:mimeType="image/*" /> </intent-filter>
+                <data android:mimeType="*/*" />
+            </intent-filter>
+
+            <intent-filter android:label="بريد AB">
+                <action android:name="android.intent.action.SEND_MULTIPLE" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="*/*" />
+            </intent-filter>
 
         </activity>
     </application>
