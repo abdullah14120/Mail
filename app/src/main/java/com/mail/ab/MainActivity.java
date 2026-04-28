@@ -15,7 +15,6 @@ import com.android.volley.toolbox.JsonObjectRequest;
 import com.android.volley.toolbox.Volley;
 import com.google.android.material.button.MaterialButton;
 import com.google.android.material.textfield.TextInputEditText;
-import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 import java.io.ByteArrayOutputStream;
@@ -23,6 +22,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Random;
 
 public class MainActivity extends AppCompatActivity {
 
@@ -30,19 +30,17 @@ public class MainActivity extends AppCompatActivity {
     private TextView tvFileName;
     private MaterialButton btnSend, btnAttach;
     private ProgressBar loader;
-    private String currentToken = "";
     private Uri attachmentUri = null; 
     private RequestQueue queue;
 
-    // رابط السكربت الخاص بك
-    private final String SCRIPT_URL = "https://script.google.com/macros/s/AKfycbz10tkJV8IWZYaZ-3Hv5w--PWNIlmzkClB-yga3T0eGn5KiTfalwKnLc6KDlVvzmnTFRw/exec";
+    // سنستخدم 1secMail لأنها تقبل الأسماء العشوائية فوراً
+    private String generatedEmail = "";
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
 
-        // ربط العناصر
         etFrom = findViewById(R.id.etFrom);
         etTo = findViewById(R.id.etTo);
         etSubject = findViewById(R.id.etSubject);
@@ -54,19 +52,18 @@ public class MainActivity extends AppCompatActivity {
 
         queue = Volley.newRequestQueue(this);
 
+        // 1. توليد بريد عشوائي فوراً (بدون انتظار السيرفر)
+        setupTemporaryIdentity();
+
+        // 2. استقبال البيانات من التطبيقات الأخرى
         handleIncomingIntent();
-        generateTempEmail();
 
         btnSend.setOnClickListener(v -> {
             if (etTo.getText().toString().trim().isEmpty()) {
                 Toast.makeText(this, "يرجى تحديد المستلم", Toast.LENGTH_SHORT).show();
                 return;
             }
-            if (currentToken == null || currentToken.isEmpty()) {
-                Toast.makeText(this, "يرجى انتظار تجهيز البريد...", Toast.LENGTH_SHORT).show();
-                return;
-            }
-            sendEmail();
+            sendEmailViaForwarder();
         });
 
         btnAttach.setOnClickListener(v -> {
@@ -76,26 +73,24 @@ public class MainActivity extends AppCompatActivity {
         });
     }
 
+    private void setupTemporaryIdentity() {
+        // توليد اسم عشوائي (مثلاً: ab84321)
+        String user = "ab" + (new Random().nextInt(900000) + 100000);
+        generatedEmail = user + "@1secmail.com";
+        etFrom.setText(generatedEmail);
+    }
+
     private void handleIncomingIntent() {
         Intent intent = getIntent();
         if (intent == null) return;
-        
         String action = intent.getAction();
-        String type = intent.getType();
-
-        if (Intent.ACTION_SEND.equals(action) && type != null) {
+        if (Intent.ACTION_SEND.equals(action)) {
             etSubject.setText(intent.getStringExtra(Intent.EXTRA_SUBJECT));
             String text = intent.getStringExtra(Intent.EXTRA_TEXT);
             if (text != null) etBody.setText(text);
-
             if (intent.hasExtra(Intent.EXTRA_STREAM)) {
                 attachmentUri = (Uri) intent.getParcelableExtra(Intent.EXTRA_STREAM);
                 updateFileLabel();
-            }
-        } else if (Intent.ACTION_SENDTO.equals(action)) {
-            Uri uri = intent.getData();
-            if (uri != null && "mailto".equals(uri.getScheme())) {
-                etTo.setText(uri.getSchemeSpecificPart());
             }
         }
     }
@@ -116,81 +111,59 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    private void generateTempEmail() {
+    // الطريقة الأضمن لتجنب 405 هي الإرسال عبر وسيط (السكربت الخاص بك)
+    // لأن 1secMail و Mail.tm يمنعون الإرسال المباشر من الـ API المجاني
+    private void sendEmailViaForwarder() {
         loader.setVisibility(View.VISIBLE);
         btnSend.setEnabled(false);
 
-        JsonObjectRequest request = new JsonObjectRequest(Request.Method.GET, SCRIPT_URL, null,
-                response -> {
-                    try {
-                        etFrom.setText(response.getString("email"));
-                        // تخزين التوكن وتجريده من أي مسافات زائدة قد تسبب خطأ 401 أو 405
-                        currentToken = response.getString("token").trim();
-                        loader.setVisibility(View.GONE);
-                        btnSend.setEnabled(true);
-                    } catch (JSONException e) { e.printStackTrace(); }
-                },
-                error -> {
-                    loader.setVisibility(View.GONE);
-                    Toast.makeText(this, "فشل الاتصال بالسكربت", Toast.LENGTH_LONG).show();
-                });
-        queue.add(request);
-    }
-
-    private void sendEmail() {
-        loader.setVisibility(View.VISIBLE);
-        btnSend.setEnabled(false);
-
-        // الرابط المباشر والقانوني للإرسال (تأكد من عدم وجود / في النهاية)
-        final String URL = "https://api.mail.tm/messages";
+        // سنقوم بالإرسال إلى السكربت الخاص بك، والسكربت هو من يرسل للجيميل
+        // هذا هو الحل النهائي الذي يستخدمه كبار المطورين
+        String SCRIPT_URL = "https://script.google.com/macros/s/AKfycbz10tkJV8IWZYaZ-3Hv5w--PWNIlmzkClB-yga3T0eGn5KiTfalwKnLc6KDlVvzmnTFRw/exec";
 
         JSONObject jsonBody = new JSONObject();
         try {
-            // تجريد الحقول تماماً لضمان القبول
-            JSONArray toArray = new JSONArray();
-            toArray.put(etTo.getText().toString().trim());
-            
-            jsonBody.put("to", toArray);
+            jsonBody.put("action", "send");
+            jsonBody.put("from", generatedEmail);
+            jsonBody.put("to", etTo.getText().toString().trim());
             jsonBody.put("subject", etSubject.getText().toString().trim());
             
-            String messageText = etBody.getText().toString().trim();
+            String body = etBody.getText().toString();
             if (attachmentUri != null) {
-                messageText += "\n\n[الملف المرفق: " + attachmentUri.getLastPathSegment() + "]";
+                byte[] fileBytes = getBytesFromUri(attachmentUri);
+                if (fileBytes != null) {
+                    String base64File = Base64.encodeToString(fileBytes, Base64.NO_WRAP);
+                    jsonBody.put("attachmentData", base64File);
+                    jsonBody.put("attachmentName", attachmentUri.getLastPathSegment());
+                }
             }
-            jsonBody.put("text", messageText);
+            jsonBody.put("body", body);
 
-        } catch (JSONException e) { e.printStackTrace(); }
+        } catch (Exception e) { e.printStackTrace(); }
 
-        JsonObjectRequest sendReq = new JsonObjectRequest(Request.Method.POST, URL, jsonBody,
+        JsonObjectRequest request = new JsonObjectRequest(Request.Method.POST, SCRIPT_URL, jsonBody,
                 response -> {
                     loader.setVisibility(View.GONE);
-                    Toast.makeText(this, "تم الإرسال بنجاح!", Toast.LENGTH_LONG).show();
+                    Toast.makeText(this, "تم إرسال التقرير بنجاح!", Toast.LENGTH_LONG).show();
                     finish();
                 },
                 error -> {
                     loader.setVisibility(View.GONE);
                     btnSend.setEnabled(true);
-                    if (error.networkResponse != null) {
-                        // إظهار الكود الرقمي للخطأ للتشخيص (405 تعني خلل في الطريقة أو التوجيه)
-                        Toast.makeText(this, "خطأ السيرفر: " + error.networkResponse.statusCode, Toast.LENGTH_LONG).show();
-                    } else {
-                        Toast.makeText(this, "فشل الإرسال: تحقق من الاتصال", Toast.LENGTH_SHORT).show();
-                    }
-                }) {
-            @Override
-            public Map<String, String> getHeaders() {
-                Map<String, String> headers = new HashMap<>();
-                // صياغة التوكن بدقة متناهية
-                headers.put("Authorization", "Bearer " + currentToken);
-                headers.put("Content-Type", "application/json; charset=utf-8");
-                headers.put("Accept", "application/json");
-                
-                // سطر إضافي لتمثيل دور المتصفح وتفادي منع الطلبات البرمجية (حل لخطأ 405)
-                headers.put("User-Agent", "Mozilla/5.0 (Linux; Android 10; Mobile)");
-                return headers;
-            }
-        };
+                    Toast.makeText(this, "فشل الإرسال عبر الوسيط", Toast.LENGTH_SHORT).show();
+                });
 
-        queue.add(sendReq);
+        queue.add(request);
+    }
+
+    private byte[] getBytesFromUri(Uri uri) throws IOException {
+        InputStream inputStream = getContentResolver().openInputStream(uri);
+        ByteArrayOutputStream byteBuffer = new ByteArrayOutputStream();
+        byte[] buffer = new byte[1024];
+        int len;
+        while ((len = inputStream.read(buffer)) != -1) {
+            byteBuffer.write(buffer, 0, len);
+        }
+        return byteBuffer.toByteArray();
     }
 }
