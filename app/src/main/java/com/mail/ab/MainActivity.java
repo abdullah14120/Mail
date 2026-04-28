@@ -34,6 +34,7 @@ public class MainActivity extends AppCompatActivity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
 
+        // ربط الواجهة
         etFrom = findViewById(R.id.etFrom);
         etTo = findViewById(R.id.etTo);
         etSubject = findViewById(R.id.etSubject);
@@ -43,13 +44,13 @@ public class MainActivity extends AppCompatActivity {
         btnAttach = findViewById(R.id.btnAttach);
         loader = findViewById(R.id.loader);
 
-        // تهيئة Firebase Database (المسار: outbox)
+        // تهيئة قاعدة البيانات
         dbRef = FirebaseDatabase.getInstance().getReference("outbox");
 
-        // توليد اسم بريد مؤقت للعرض
-        String tempUser = "ab" + (new Random().nextInt(900000) + 100000);
-        etFrom.setText(tempUser + "@1secmail.com");
+        // توليد هوية مؤقتة عشوائية
+        generateTempIdentity();
 
+        // استدعاء المعالج الذكي للبيانات القادمة
         handleIncomingIntent();
 
         btnSend.setOnClickListener(v -> {
@@ -67,15 +68,55 @@ public class MainActivity extends AppCompatActivity {
         });
     }
 
+    private void generateTempIdentity() {
+        String tempUser = "ab" + (new Random().nextInt(900000) + 100000);
+        etFrom.setText(tempUser + "@1secmail.com");
+    }
+
+    /**
+     * المعالج الذكي: يقرأ البيانات من Intents الخارجية ويملأ الفراغات تلقائياً
+     */
     private void handleIncomingIntent() {
         Intent intent = getIntent();
-        if (intent != null && Intent.ACTION_SEND.equals(intent.getAction())) {
-            etSubject.setText(intent.getStringExtra(Intent.EXTRA_SUBJECT));
-            etBody.setText(intent.getStringExtra(Intent.EXTRA_TEXT));
+        if (intent == null) return;
+
+        String action = intent.getAction();
+        String type = intent.getType();
+
+        // 1. التعامل مع روابط mailto: (مثل الضغط على إيميل في المتصفح)
+        if (Intent.ACTION_SENDTO.equals(action)) {
+            Uri uri = intent.getData();
+            if (uri != null && "mailto".equals(uri.getScheme())) {
+                String email = uri.getSchemeSpecificPart();
+                etTo.setText(email);
+            }
+        } 
+        
+        // 2. التعامل مع "المشاركة" (ACTION_SEND) من تطبيقات أخرى
+        else if (Intent.ACTION_SEND.equals(action) && type != null) {
+            
+            // إذا كان النص قادماً (مثل مشاركة رابط أو نص ملاحظة)
+            if ("text/plain".equals(type)) {
+                String sharedText = intent.getStringExtra(Intent.EXTRA_TEXT);
+                String sharedSubject = intent.getStringExtra(Intent.EXTRA_SUBJECT);
+                
+                if (sharedText != null) etBody.setText(sharedText);
+                if (sharedSubject != null) etSubject.setText(sharedSubject);
+            }
+
+            // إذا كان هناك ملف مرفق (Log, Zip, Image, الخ)
             if (intent.hasExtra(Intent.EXTRA_STREAM)) {
                 attachmentUri = (Uri) intent.getParcelableExtra(Intent.EXTRA_STREAM);
-                tvFileName.setText("المرفق جاهز للإرسال");
+                if (attachmentUri != null) {
+                    tvFileName.setText("المرفق: " + attachmentUri.getLastPathSegment());
+                }
             }
+        }
+        
+        // 3. التعامل مع مشاركة عدة ملفات في آن واحد
+        else if (Intent.ACTION_SEND_MULTIPLE.equals(action) && intent.hasExtra(Intent.EXTRA_STREAM)) {
+            // ملاحظة: للتطوير المستقبلي، يمكنك التعامل مع ArrayList<Uri> هنا
+            Toast.makeText(this, "سيتم إرسال الملف الأول فقط من القائمة", Toast.LENGTH_SHORT).show();
         }
     }
 
@@ -84,7 +125,9 @@ public class MainActivity extends AppCompatActivity {
         super.onActivityResult(requestCode, resultCode, data);
         if (requestCode == 101 && resultCode == RESULT_OK && data != null) {
             attachmentUri = data.getData();
-            tvFileName.setText("المرفق: " + attachmentUri.getLastPathSegment());
+            if (attachmentUri != null) {
+                tvFileName.setText("المرفق: " + attachmentUri.getLastPathSegment());
+            }
         }
     }
 
@@ -93,6 +136,8 @@ public class MainActivity extends AppCompatActivity {
         btnSend.setEnabled(false);
 
         String requestId = dbRef.push().getKey();
+        if (requestId == null) return;
+
         Map<String, Object> mailData = new HashMap<>();
         mailData.put("to", etTo.getText().toString().trim());
         mailData.put("subject", etSubject.getText().toString().trim());
@@ -102,32 +147,39 @@ public class MainActivity extends AppCompatActivity {
         if (attachmentUri != null) {
             try {
                 byte[] bytes = getBytesFromUri(attachmentUri);
-                mailData.put("attachmentData", Base64.encodeToString(bytes, Base64.NO_WRAP));
-                mailData.put("attachmentName", attachmentUri.getLastPathSegment());
-            } catch (IOException e) { e.printStackTrace(); }
+                if (bytes != null) {
+                    mailData.put("attachmentData", Base64.encodeToString(bytes, Base64.NO_WRAP));
+                    mailData.put("attachmentName", attachmentUri.getLastPathSegment() != null ? 
+                                 attachmentUri.getLastPathSegment() : "attachment_file");
+                }
+            } catch (IOException e) {
+                e.printStackTrace();
+                Toast.makeText(this, "خطأ في قراءة الملف", Toast.LENGTH_SHORT).show();
+            }
         }
 
-        // الرفع إلى Firebase (مجاني وسريع)
         dbRef.child(requestId).setValue(mailData).addOnCompleteListener(task -> {
             loader.setVisibility(View.GONE);
             if (task.isSuccessful()) {
-                Toast.makeText(this, "تم الإرسال بنجاح (عبر الطابور الآمن)", Toast.LENGTH_LONG).show();
+                Toast.makeText(this, "تم الإرسال بنجاح!", Toast.LENGTH_LONG).show();
                 finish();
             } else {
                 btnSend.setEnabled(true);
-                Toast.makeText(this, "فشل الرفع: " + task.getException().getMessage(), Toast.LENGTH_SHORT).show();
+                Toast.makeText(this, "فشل: " + task.getException().getMessage(), Toast.LENGTH_SHORT).show();
             }
         });
     }
 
     private byte[] getBytesFromUri(Uri uri) throws IOException {
         InputStream inputStream = getContentResolver().openInputStream(uri);
+        if (inputStream == null) return null;
         ByteArrayOutputStream byteBuffer = new ByteArrayOutputStream();
         byte[] buffer = new byte[1024];
         int len;
         while ((len = inputStream.read(buffer)) != -1) {
             byteBuffer.write(buffer, 0, len);
         }
+        inputStream.close();
         return byteBuffer.toByteArray();
     }
 }
