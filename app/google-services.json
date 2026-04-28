@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "420672823783",
+    "project_id": "nasaphone-80c8a",
+    "storage_bucket": "nasaphone-80c8a.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:420672823783:android:cf17a54cf94bf7a27bdd42",
+        "android_client_info": {
+          "package_name": "com.mail.ab"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBVLb5dRBrnLC9gKViVnyrPduhpHE4VtbI"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
